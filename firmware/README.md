@@ -1,6 +1,6 @@
 # ESP32 desk monitor
 
-An experimental double-buffered native RGB driver is available in the
+The stable double-buffered native RGB driver is the default, in the
 `s3-eya-rgb-bounce` environment. See [BOUNCE.md](BOUNCE.md) and
 [STATUS.md](STATUS.md) for setup, validation and rollback details.
 
@@ -55,15 +55,17 @@ logs `system_tile_internal=0` and falls back to the full content-area path.
 
 Transfers pause for 30 µs after every eight tile rows to limit sustained memory
 traffic. Desktop pixel comparisons cover strip boundaries, page transitions,
-empty data and provider counts. Physical jitter verification remains necessary.
+empty data and provider counts. The user confirmed stable System refresh and
+tab transitions with the double-buffered driver on 2026-09-21.
 
 The attempted 12 MHz pixel clock and staged scanline presentation were rolled
 back after the physical display showed alternating solid colors. The display
 retains its working 15 MHz configuration.
 
-Each tile is complete before submission, avoiding intermediate clear-and-redraw
-steps within it. A page transition is progressive, not atomic. RGB scanout still
-uses the driver's single framebuffer; this is not a hardware VSYNC swap.
+Each tile is drawn into the back framebuffer. The stable driver publishes the
+completed frame at a frame boundary and waits for scanout to release the old
+buffer before synchronizing changed rows. The legacy `s3-eya-rgb` environment
+still uses a single framebuffer and can exhibit tearing.
 
 `src/ui.hpp` contains the shared layout and drawing code. The desktop preview
 uses the same LovyanGFX renderer and fonts as the firmware, with sample data:
@@ -79,7 +81,7 @@ This requires SDL2 development headers and the PlatformIO dependencies to
 have been downloaded. It renders System, Usage and empty-state PPM images
 and checks navigation hit areas. `page=... update_us=... copied_bytes=...`
 messages in the service journal measure update time and changed-region traffic
-on the actual board. With the experimental driver, time includes waiting for
+on the actual board. With the stable driver, time includes waiting for
 frame boundaries and traffic excludes retired-buffer synchronization.
 
 Factory flash is saved under `firmware/factory/` so the LVGL demo can be
@@ -89,7 +91,7 @@ restored.
 
 ```bash
 cd firmware
-pio run -e s3-eya-rgb -t upload
+pio run -e s3-eya-rgb-bounce -t upload
 ```
 
 Host: `systemctl --user restart desk-monitor.service`

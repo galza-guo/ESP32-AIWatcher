@@ -1,9 +1,9 @@
-# Experimental RGB bounce-buffer driver
+# Stable double-buffered RGB driver
 
 Build with `pio run -d firmware -e s3-eya-rgb-bounce` from the repository root.
 This environment pins pioarduino 55.03.312 (Arduino 3.3.12 / ESP-IDF 5.5.5),
-LovyanGFX 1.2.29, and ArduinoJson 7.4.3. The default `s3-eya-rgb` environment
-remains the previous driver and is available for rollback.
+LovyanGFX 1.2.29, and ArduinoJson 7.4.3. This is the default build environment. The legacy `s3-eya-rgb` environment
+remains available for rollback.
 
 ## Why a separate driver
 
@@ -36,7 +36,8 @@ a frame boundary. Rendering waits for two subsequent frame-complete callbacks
 before reusing the retired buffer, conservatively covering a callback racing
 with publication. Only changed row spans are copied to bring the retired buffer
 up to date. A 250 ms timeout stops rendering instead of writing into a potentially
-active scanout buffer. Hardware validation is still needed.
+active scanout buffer. The user confirmed on 2026-09-21 that both System refresh tearing and tab-switch
+tearing are completely resolved.
 
 ## Hardware validation
 

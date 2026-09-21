@@ -12,9 +12,10 @@ readings from your computer over serial.
 - A light, restrained interface with two touch tabs and a physical BOOT-button
   shortcut. A companion browser dashboard runs at `http://127.0.0.1:7824/`.
 
-**Development status:** the display and touch work on the hardware below.
-Occasional System refresh jitter and jitter during tab switches remain under
-investigation. See [the hardware checkpoint](firmware/STATUS.md).
+**Stable release: v1.0.0.** Display, touch, live System updates and tab switching
+are verified on the hardware below. Double framebuffers and internal RGB DMA
+buffers resolve the previously observed tearing. See [hardware validation](firmware/STATUS.md)
+and [download the release](https://github.com/galza-guo/ESP32-AIWatcher/releases/tag/v1.0.0).
 
 ## Hardware
 
@@ -63,8 +64,8 @@ Install PlatformIO Core, connect the board, and stop any collector or serial
 monitor that owns its port:
 
 ```bash
-pio run -d firmware -e s3-eya-rgb
-pio run -d firmware -e s3-eya-rgb -t upload
+pio run -d firmware -e s3-eya-rgb-bounce
+pio run -d firmware -e s3-eya-rgb-bounce -t upload
 ```
 
 Restart the collector afterward. For an existing user service:

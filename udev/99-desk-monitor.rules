@@ -1,0 +1,2 @@
+# QinHeng CH340 on the ESP32-S3 desk board: seat access without a re-login.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", TAG+="uaccess", MODE="0660"

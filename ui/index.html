@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Desk Monitor</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main class="slab">
+    <header class="nav">
+      <div class="tabs" role="tablist">
+        <button id="tab-sys" class="tab is-on" role="tab" aria-selected="true">System</button>
+        <button id="tab-ai" class="tab" role="tab" aria-selected="false">Usage</button>
+      </div>
+    </header>
+
+    <section id="page-sys" class="page is-on" role="tabpanel">
+      <article class="row" data-metric="cpu">
+        <div class="row-head">
+          <span class="label">CPU</span>
+          <span class="value" id="val-cpu">—</span>
+        </div>
+        <canvas class="scope" id="scope-cpu" width="720" height="120"></canvas>
+      </article>
+      <article class="row" data-metric="mem">
+        <div class="row-head">
+          <span class="label">Memory</span>
+          <span class="value" id="val-mem">—</span>
+        </div>
+        <canvas class="scope" id="scope-mem" width="720" height="120"></canvas>
+      </article>
+      <article class="row" data-metric="temp">
+        <div class="row-head">
+          <span class="label">Temperature</span>
+          <span class="value" id="val-temp">—</span>
+        </div>
+        <canvas class="scope" id="scope-temp" width="720" height="120"></canvas>
+      </article>
+      <article class="row" data-metric="fan">
+        <div class="row-head">
+          <span class="label">Fan</span>
+          <span class="value" id="val-fan">—</span>
+        </div>
+        <canvas class="scope" id="scope-fan" width="720" height="120"></canvas>
+      </article>
+    </section>
+
+    <section id="page-ai" class="page" role="tabpanel" hidden>
+      <div id="ai-list" class="ai-list"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

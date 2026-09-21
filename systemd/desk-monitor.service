@@ -1,0 +1,13 @@
+[Unit]
+Description=Desk monitor collector and local UI
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/galza/Work/desk-monitor/host/desk_monitor.py
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

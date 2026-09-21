@@ -1,36 +1,43 @@
-# Hardware checkpoint — 2026-09-21
+# Stable hardware validation — v1.0.0
 
-The active ESP32-S3 firmware is `src/main.cpp`, with layout in `src/ui.hpp`
-and board wiring/timing in `src/panel.hpp`. Build the `s3-eya-rgb` environment
-from `platformio.ini`. The older `desk_monitor/desk_monitor.ino` is not the
-firmware currently running on the board.
+On 2026-09-21, the user confirmed that the previously observed periodic tearing
+in the lower System page and during System / Usage transitions was completely
+resolved. The double-buffered native RGB driver is the stable default.
 
-## Confirmed behavior
+## Verified configuration
 
-- Display and GT911 touch work; System / Usage tabs respond to taps.
-- The minimal light UI and host serial collector are running on hardware.
-- System updates use an internal SRAM card tile and changed-row spans.
-- Page switches and Usage updates use internal SRAM strips.
-- **Unresolved:** System still occasionally jitters; switching tabs also jitters,
-  as confirmed by the user after the latest strip-rendering change.
-- The display remains at its working 15 MHz pixel clock. A previous experiment
-  combining 12 MHz with scanline presentation produced alternating full-screen
-  solid colors and was rolled back. The exact cause was not isolated.
-- The driver has one scanout framebuffer; page updates are not VSYNC swaps.
+- EYA EA4313-S3: ESP32-S3, 8 MB PSRAM, 16 MB flash, 800×480 RGB, GT911 touch.
+- Environment: `s3-eya-rgb-bounce`, pioarduino 55.03.312.
+- Arduino 3.3.12 / ESP-IDF 5.5.5; LovyanGFX 1.2.29; ArduinoJson 7.4.3.
+- Two PSRAM framebuffers and two internal 10-line DMA buffers (32,000 bytes).
+- Internal rendering tile: 90,592 bytes; nominal pixel clock: 15 MHz.
+- Display, GT911 touch, live System updates and tab transitions work on hardware.
+- First sampled System updates took 74–80 ms, including frame-boundary waits.
 
-## Validation and reproduction
+## Validation
 
-Last firmware build: PlatformIO espressif32 7.1.3, Arduino 2.0.17,
-LovyanGFX 1.2.29, ArduinoJson 7.4.3. Dependencies currently use version ranges.
-The `s3-eya-rgb` build and on-device flash hash verification passed. The shared
-native renderer's assertions cover navigation, incremental card updates and
-strip-rendered page transitions, including empty data and shorter values.
-These checks do not establish physical scanout stability.
+Firmware build and flash hash verification passed. Startup logs confirmed all
+buffers and touch initialization, with no observed frame-boundary timeout.
+Four Python host tests passed. Native preview assertions passed for navigation,
+incremental card rendering, strip-based page transitions, empty data, shorter
+values, and synchronizing the retired framebuffer after presentation.
 
-See `README.md` for build/preview instructions and UART logging. Use the host
-collector's existing serial connection for logs; stop `desk-monitor.service`
-before flashing and restart it afterward.
+The active firmware is `src/main.cpp`; `src/ui.hpp` holds the shared layout and
+`src/panel_bounce.hpp` the stable native driver. The older Arduino sketch under
+`desk_monitor/` is not the active application. See [BOUNCE.md](BOUNCE.md) for
+buffer ownership and [README.md](README.md) for wiring and logging.
 
-This Git checkpoint includes the earlier uncommitted host/firmware setup and
-the subsequent touch, UI and rendering work. Factory binary dumps and build
-outputs remain local and are excluded from Git.
+## Historical baseline and rollback
+
+The legacy `s3-eya-rgb` environment uses Arduino 2.0.17 and LovyanGFX's
+single-framebuffer RGB bus. Touch worked, but System updates and tab transitions
+still tore after incremental rendering reduced memory traffic. This environment
+is retained for rollback, not as the default build.
+
+A separate experiment combining a 12 MHz clock with staged scanline copies
+produced alternating solid colors and was rolled back; its exact cause was
+not isolated. The stable version retains the working nominal 15 MHz timing.
+
+Before changing SDK generations, preserve both the current application image
+and the first 64 KiB of flash. Factory dumps and local rollback binaries are
+excluded from Git and are not included in public releases.

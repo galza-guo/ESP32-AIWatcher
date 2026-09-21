@@ -1,5 +1,6 @@
 #include "../src/ui.hpp"
 #include "../src/dirty_span.hpp"
+#include "../src/frame_damage.hpp"
 #include <cassert>
 #include <cstring>
 #include <vector>
@@ -89,6 +90,9 @@ int main() {
   // page transitions, missing data, and changing provider counts.
   std::vector<uint16_t> storage(CONTENT_W * SYSTEM_CARD_H);
   tile.setBuffer(storage.data(), WIDTH, 48, 16);
+  std::vector<uint16_t> front(WIDTH * HEIGHT);
+  memcpy(front.data(), canvas.getBuffer(), WIDTH * HEIGHT * 2);
+  FrameDamage<WIDTH, HEIGHT> damage;
   for (int frame = 0; frame < 8; ++frame) {
     Page next = frame % 2 ? PAGE_AI : PAGE_SYS;
     const auto &state = frame < 4 ? sys : empty;
@@ -101,6 +105,7 @@ int main() {
         auto after = static_cast<uint16_t *>(tile.getBuffer()) + row * WIDTH;
         int begin, end;
         if (changed_span(before, after, WIDTH, begin, end)) {
+          damage.mark(begin, y + row, end - begin, 1);
           canvas.setClipRect(begin, y + row, end - begin, 1);
           tile.pushSprite(&canvas, 0, y);
         }
@@ -108,6 +113,11 @@ int main() {
       canvas.clearClipRect();
     }
     assert(!memcmp(canvas.getBuffer(), expected.getBuffer(), WIDTH * HEIGHT * 2));
+    // After presentation, the exact same damage tracker used on the device
+    // must bring the retired frame up to date, including multiple spans/row.
+    damage.synchronize(static_cast<uint16_t *>(canvas.getBuffer()), front.data());
+    assert(!memcmp(front.data(), expected.getBuffer(), WIDTH * HEIGHT * 2));
+    assert(!damage.changed());
   }
   tile.setBuffer(storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
   assert(tile.width() == CONTENT_W && tile.height() == SYSTEM_CARD_H);

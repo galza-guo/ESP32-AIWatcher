@@ -101,6 +101,15 @@ static void present(bool full) {
   if (!full) lcd.setClipRect(CONTENT_X, CONTENT_Y, CONTENT_W, HEIGHT - CONTENT_Y);
   canvas.pushSprite(0, 0);
   lcd.clearClipRect();
+#ifdef DESK_RGB_BOUNCE
+  lcd.markDirty(0, 0, WIDTH, HEIGHT);
+#endif
+}
+
+static void finish_frame() {
+#ifdef DESK_RGB_BOUNCE
+  if (!lcd.presentFrame()) while (true) delay(1000);
+#endif
 }
 
 static uint32_t submit_tile(int x, int y) {
@@ -118,6 +127,9 @@ static uint32_t submit_tile(int x, int y) {
       memcpy(old_row + begin, new_row + begin, bytes);
       lcd.setClipRect(x + begin, y + row, end - begin, 1);
       system_tile.pushSprite(&lcd, x, y);
+#ifdef DESK_RGB_BOUNCE
+      lcd.markDirty(x + begin, y + row, end - begin, 1);
+#endif
       copied += bytes;
     }
     // Bound each burst of external-memory reads/writes during RGB scanout.
@@ -144,6 +156,7 @@ static void update_system() {
   if (!tile_ready) {
     system_cards(canvas, sys);
     present(false);
+    finish_frame();
     return;
   }
   uint32_t started = micros();
@@ -156,6 +169,7 @@ static void update_system() {
     copied += submit_tile(CONTENT_X, y);
   }
   lcd.clearClipRect();
+  finish_frame();
   // A bounded diagnostic sample verifies the actual traffic after startup.
   static unsigned samples = 0;
   if (samples < 3) {
@@ -174,6 +188,7 @@ static void show_page() {
     present(true);
     copied = WIDTH * HEIGHT * 2;
   }
+  finish_frame();
   Serial.printf("page=%s update_us=%lu copied_bytes=%lu\n",
                 page == PAGE_SYS ? "System" : "Usage",
                 (unsigned long)(micros() - started), (unsigned long)copied);
@@ -253,7 +268,10 @@ void setup() {
   pinMode(BTN_PIN, INPUT_PULLUP);
   pinMode(1, OUTPUT);
   digitalWrite(1, HIGH);
-  lcd.init();
+  if (!lcd.init()) {
+    Serial.println("error: display initialization failed");
+    while (true) delay(1000);
+  }
   lcd.setRotation(0);
   lcd.setBrightness(255);
   digitalWrite(1, HIGH);
@@ -350,6 +368,7 @@ void loop() {
       usage_cards(canvas, providers, provider_n);
       present(false);
     }
+    finish_frame();
     ai_dirty = false;
   }
 }

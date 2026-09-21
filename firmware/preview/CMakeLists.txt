@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(desk_monitor_preview C CXX)
 set(CMAKE_CXX_STANDARD 17)
-set(LGFX "${CMAKE_CURRENT_SOURCE_DIR}/../.pio/libdeps/s3-eya-rgb/LovyanGFX/src")
+set(LGFX "${CMAKE_CURRENT_SOURCE_DIR}/../.pio/libdeps/s3-eya-rgb-bounce/LovyanGFX/src")
+if(NOT EXISTS "${LGFX}")
+  set(LGFX "${CMAKE_CURRENT_SOURCE_DIR}/../.pio/libdeps/s3-eya-rgb/LovyanGFX/src")
+endif()
 find_package(SDL2 REQUIRED)
 file(GLOB SOURCES
   "${LGFX}/lgfx/Fonts/efont/*.c" "${LGFX}/lgfx/Fonts/IPA/*.c"

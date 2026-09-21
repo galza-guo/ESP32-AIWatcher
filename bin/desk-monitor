@@ -1,3 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec /usr/bin/python3 /home/galza/Work/desk-monitor/host/desk_monitor.py
+PY=/usr/bin/python3
+APP=/home/galza/Work/desk-monitor/host/desk_monitor.py
+if "$PY" - <<'PY'
+import grp
+import os
+import sys
+
+sys.exit(0 if grp.getgrnam("uucp").gr_gid in os.getgroups() else 1)
+PY
+then
+  exec "$PY" "$APP"
+fi
+exec newgrp uucp <<EOF
+exec $PY $APP
+EOF

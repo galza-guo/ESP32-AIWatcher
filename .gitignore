@@ -1,5 +1,5 @@
-__pycache__/
+firmware/.pio/
+firmware/factory/*.bin
+host/__pycache__/
 *.pyc
-.pio
-.vscode
-*.swp
+.pio/

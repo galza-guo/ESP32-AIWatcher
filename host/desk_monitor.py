@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import struct
 import sys
 import termios
 import threading
@@ -22,7 +24,7 @@ GROK_SESSIONS = Path.home() / ".grok" / "sessions"
 HOST = "127.0.0.1"
 PORT = 7824
 HISTORY = 180
-SYS_HZ = 2.0
+SYS_HZ = 6.0
 AI_PERIOD = 15.0
 SERIAL_CANDIDATES = (
     Path("/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"),
@@ -271,9 +273,46 @@ class Collector:
                 "ai": dict(self.ai),
             }
 
-    def serial_line(self) -> bytes:
-        snap = self.snapshot(include_history=False)
-        return (json.dumps({"v": 1, **snap}, separators=(",", ":")) + "\n").encode()
+    def serial_sys_line(self) -> bytes:
+        with self.lock:
+            latest = dict(self.latest)
+
+        def num(key: str) -> float | None:
+            value = latest.get(key)
+            if value is None:
+                return None
+            return round(float(value), 1)
+
+        payload = {
+            "t": "s",
+            "cpu": num("cpu"),
+            "mem": num("mem"),
+            "temp": num("temp"),
+            "fan": num("fan"),
+        }
+        return (json.dumps(payload, separators=(",", ":")) + "\n").encode()
+
+    def serial_ai_line(self) -> bytes:
+        with self.lock:
+            providers_in = list(self.ai.get("providers") or [])
+        providers = []
+        for row in providers_in:
+            week = [int((item or {}).get("value") or 0) for item in (row.get("recent") or [])][-7:]
+            limit = 0.0
+            limits = row.get("limits") or []
+            if limits and isinstance(limits[0], dict):
+                limit = float(limits[0].get("percent") or 0)
+            providers.append(
+                {
+                    "n": row.get("label"),
+                    "v": int(row.get("todayTokens") or 0),
+                    "u": row.get("todayUsd"),
+                    "l": round(limit, 3),
+                    "g": row.get("tier") or "",
+                    "w": week,
+                }
+            )
+        return (json.dumps({"t": "a", "p": providers}, separators=(",", ":")) + "\n").encode()
 
 
 COLLECTOR = Collector()
@@ -290,6 +329,14 @@ def configure_serial(fd: int) -> None:
     attrs[6][termios.VMIN] = 0
     attrs[6][termios.VTIME] = 0
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    # CH340 DTR/RTS are EN and GPIO0. Leave both idle so the panel
+    # stays in SPI flash boot instead of download-mode black screen.
+    mask = struct.pack("I", termios.TIOCM_DTR | termios.TIOCM_RTS)
+    fcntl.ioctl(fd, termios.TIOCMBIC, mask)
+    time.sleep(0.05)
+    fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", termios.TIOCM_RTS))
+    time.sleep(0.08)
+    fcntl.ioctl(fd, termios.TIOCMBIC, mask)
 
 
 def open_serial() -> tuple[int | None, str | None]:
@@ -310,21 +357,40 @@ def collector_loop() -> None:
     serial_fd: int | None = None
     serial_path: str | None = None
     last_serial_try = 0.0
+    serial_rx = b""
     COLLECTOR.sample_sys()
     COLLECTOR.sample_ai()
+    send_ai = True
     while not COLLECTOR._stop.is_set():
         COLLECTOR.sample_sys()
         now = time.time()
         if now - last_ai >= AI_PERIOD:
             COLLECTOR.sample_ai()
             last_ai = now
+            send_ai = True
         if serial_fd is None and now - last_serial_try >= 2.0:
             serial_fd, serial_path = open_serial()
             COLLECTOR.serial_path = serial_path
             last_serial_try = now
+            if serial_fd is not None:
+                send_ai = True
+                serial_rx = b""
         if serial_fd is not None:
             try:
-                os.write(serial_fd, COLLECTOR.serial_line())
+                os.write(serial_fd, COLLECTOR.serial_sys_line())
+                if send_ai:
+                    os.write(serial_fd, COLLECTOR.serial_ai_line())
+                    send_ai = False
+                # Use the already-open port for firmware diagnostics. A second
+                # serial monitor can interfere with the CH340 reset lines.
+                try:
+                    serial_rx += os.read(serial_fd, 4096)
+                except BlockingIOError:
+                    pass
+                while b"\n" in serial_rx:
+                    message, serial_rx = serial_rx.split(b"\n", 1)
+                    print("panel:", message.decode("utf-8", errors="replace").rstrip())
+                serial_rx = serial_rx[-4096:]
             except OSError:
                 os.close(serial_fd)
                 serial_fd = None

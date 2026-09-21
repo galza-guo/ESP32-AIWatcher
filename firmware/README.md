@@ -1,5 +1,9 @@
 # ESP32 desk monitor
 
+An experimental double-buffered native RGB driver is available in the
+`s3-eya-rgb-bounce` environment. See [BOUNCE.md](BOUNCE.md) and
+[STATUS.md](STATUS.md) for setup, validation and rollback details.
+
 The UI runs on the panel, not on Omarchy. The ThinkPad only collects CPU /
 memory / temperature / fan and the agent usage table, then writes one JSON
 line at a time to the CH340 serial port.
@@ -73,9 +77,10 @@ cd /tmp/desk-monitor-ui-build
 
 This requires SDL2 development headers and the PlatformIO dependencies to
 have been downloaded. It renders System, Usage and empty-state PPM images
-and checks navigation hit areas. `page=... render_us=... present_us=...`
-messages in the service journal measure composition and framebuffer-copy
-time on the actual board.
+and checks navigation hit areas. `page=... update_us=... copied_bytes=...`
+messages in the service journal measure update time and changed-region traffic
+on the actual board. With the experimental driver, time includes waiting for
+frame boundaries and traffic excludes retired-buffer synchronization.
 
 Factory flash is saved under `firmware/factory/` so the LVGL demo can be
 restored.

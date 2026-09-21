@@ -1,5 +1,8 @@
 #pragma once
 #define LGFX_USE_V1
+#ifdef DESK_RGB_BOUNCE
+#include "panel_bounce.hpp"
+#else
 #include <driver/i2c.h>
 #include <LovyanGFX.hpp>
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
@@ -98,3 +101,4 @@ class DeskPanel : public lgfx::LGFX_Device {
     _panel.setTouch(&_touch);
   }
 };
+#endif

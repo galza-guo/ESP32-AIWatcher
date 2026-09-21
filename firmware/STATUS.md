@@ -1,5 +1,23 @@
 # Hardware checkpoint — 2026-09-21
 
+## Current experiment: double-buffered native RGB output
+
+The `fix/rgb-bounce-buffer` branch adds the `s3-eya-rgb-bounce` environment.
+It was built and flashed successfully with Arduino 3.3.12 / ESP-IDF 5.5.5.
+Startup logs confirm two full framebuffers, 32,000 bytes of internal DMA bounce
+buffers, successful GT911 initialization, and the internal rendering tile.
+Early System updates took 74–80 ms including frame-boundary waits, with no
+timeout in the observed startup logs. Pixel-equivalence and retired-buffer
+synchronization checks passed, as did the four host tests.
+
+The user clarified that the issue resembles horizontal tearing in the lower
+part of the display, recurring during updates. Physical confirmation of this
+new driver's effect is pending. See [BOUNCE.md](BOUNCE.md) for its buffer
+ownership protocol and rollback requirements. The default environment still
+builds the prior driver described below.
+
+## Previous baseline
+
 The active ESP32-S3 firmware is `src/main.cpp`, with layout in `src/ui.hpp`
 and board wiring/timing in `src/panel.hpp`. Build the `s3-eya-rgb` environment
 from `platformio.ini`. The older `desk_monitor/desk_monitor.ino` is not the

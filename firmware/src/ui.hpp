@@ -24,6 +24,7 @@ constexpr int RENDER_TILE_H = NETWORK_H;
 constexpr uint16_t rgb(unsigned r, unsigned g, unsigned b) {
   return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 }
+inline bool DARK_THEME = false;
 inline auto PAPER = rgb(245, 245, 247);
 inline auto RAIL = rgb(237, 238, 241);
 inline auto WHITE = rgb(255, 255, 255); // Card surface in either theme.
@@ -34,11 +35,12 @@ inline auto BLUE = rgb(0, 113, 227);
 inline auto TRACK = rgb(233, 239, 247);
 
 inline void apply_theme(bool dark) {
+  DARK_THEME = dark;
   PAPER = dark ? rgb(18,18,20) : rgb(245,245,247);
   RAIL = dark ? rgb(24,24,27) : rgb(237,238,241);
   WHITE = dark ? rgb(32,32,35) : rgb(255,255,255);
   INK = dark ? rgb(242,242,247) : rgb(29,29,31);
-  MUTE = dark ? rgb(161,161,170) : rgb(116,119,128);
+  MUTE = dark ? rgb(183,183,193) : rgb(116,119,128);
   RULE = dark ? rgb(51,51,57) : rgb(224,226,232);
   BLUE = dark ? rgb(80,163,255) : rgb(0,113,227);
   TRACK = dark ? rgb(43,49,60) : rgb(233,239,247);
@@ -81,6 +83,9 @@ inline void text(lgfx::LGFX_Sprite &g, const char *s, int x, int y,
   g.setTextDatum(datum);
   g.setTextColor(color);
   g.drawString(s, x, y);
+  // One pixel of stroke weight keeps small text legible on the dark panel.
+  // Preserve font advances so compact values and aligned labels retain layout.
+  if (DARK_THEME) g.drawString(s, x+1, y);
 }
 
 inline void tokens(int64_t n, char *out, size_t size) {

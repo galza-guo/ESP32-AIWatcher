@@ -1,4 +1,4 @@
-# Display settings — 1.1.0 development build
+# Display settings — v1.1.0
 
 Open Settings using the gear at the bottom left. The top card is read-only:
 firmware version, host connection state and age of the latest system sample.
@@ -11,6 +11,7 @@ Controls:
 
 - Brightness: 10–100%, using 12 kHz / 8-bit LEDC PWM on GPIO 1.
 - Appearance: Light or Dark, applied across System, Usage and Settings.
+  Dark uses stronger text strokes and brighter secondary labels for legibility.
 - Sleep after: Never (default), 5 minutes, or 15 minutes of no touch/button
   activity. Only the backlight turns off; serial collection and touch remain
   active. The entire first touch gesture wakes the display without activating
@@ -30,7 +31,7 @@ Validation so far: firmware build and app flash verification; PWM, NVS and
 touch startup logs; native previews of both themes; full/strip pixel equivalence
 for all pages and connection states; slider hit/drag capture; preference
 roundtrips and invalid values; idle deadlines including millis wraparound;
-wake gesture suppression and button wake. Four Python host tests pass.
+wake gesture suppression and button wake. Ten Python host tests pass.
 The user confirmed the controls look good; device logs show successful setting
 writes and restoration of 22% brightness after an app update and collector
 restart. Timed sleep/wake still requires a separate physical confirmation.

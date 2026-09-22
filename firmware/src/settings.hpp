@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace desk_ui {
-constexpr const char *FIRMWARE_VERSION = "1.1.0-dev";
+constexpr const char *FIRMWARE_VERSION = "1.1.0";
 
 struct Settings {
   uint8_t brightness = 100; // Percent; keep the manual minimum visible.

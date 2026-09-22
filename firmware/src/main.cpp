@@ -81,7 +81,7 @@ static int touch_scl = 41;
 static uint8_t touch_addr = 0x14;
 
 static void push(float *hist, float value) {
-  if (isnan(value)) return;
+  // Missing readings occupy a time slot and leave a gap in the graph.
   if (sys.count < HISTORY) {
     hist[sys.count] = value;
   } else {
@@ -104,6 +104,8 @@ static void handle_sys(JsonDocument &doc) {
   push(sys.hist_mem, sys.mem);
   push(sys.hist_temp, sys.temp);
   push(sys.hist_fan, sys.fan);
+  push(sys.hist_net_down, sys.net_down);
+  push(sys.hist_net_up, sys.net_up);
   if (sys.count < HISTORY) sys.count++;
   sys_dirty = true;
 }

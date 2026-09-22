@@ -50,6 +50,7 @@ struct SysState {
   float cpu = NAN, mem = NAN, temp = NAN, fan = NAN;
   float hist_cpu[HISTORY] = {}, hist_mem[HISTORY] = {};
   float hist_temp[HISTORY] = {}, hist_fan[HISTORY] = {};
+  float hist_net_down[HISTORY] = {}, hist_net_up[HISTORY] = {};
   int count = 0;
   double net_down = NAN, net_up = NAN;
   uint64_t net_rx = 0, net_tx = 0;
@@ -184,7 +185,7 @@ inline void settings_cards(lgfx::LGFX_Sprite &g, const Settings &s,
 }
 
 inline void sparkline(lgfx::LGFX_Sprite &g, int x, int y, int w, int h,
-                      const float *samples, int count, float scale, bool fit = false) {
+                      const float *samples, int count, float scale, bool fit = false, uint16_t color = BLUE) {
   g.drawFastHLine(x, y + h - 1, w, TRACK);
   if (count <= 0) return;
   int start = fit || count < w ? 0 : count - w;
@@ -203,12 +204,12 @@ inline void sparkline(lgfx::LGFX_Sprite &g, int x, int y, int w, int h,
                  : x + w - shown + i;
     int py = y + h - 2 - (int)(fraction * (h - 4));
     if (prev_x >= 0) {
-      g.drawLine(prev_x, prev_y, px, py, BLUE);
-      g.drawLine(prev_x, prev_y + 1, px, py + 1, BLUE);
+      g.drawLine(prev_x, prev_y, px, py, color);
+      g.drawLine(prev_x, prev_y + 1, px, py + 1, color);
     }
     prev_x = px; prev_y = py;
   }
-  if (prev_x >= 0) g.fillCircle(prev_x, prev_y, 2, BLUE);
+  if (prev_x >= 0) g.fillCircle(prev_x, prev_y, 2, color);
 }
 
 inline void system_card(lgfx::LGFX_Sprite &g, const SysState &s, int i, int x, int y) {
@@ -238,19 +239,52 @@ inline void traffic(double bytes, bool rate, char *out, size_t size) {
   snprintf(out, size, unit ? "%.1f %s%s" : "%.0f %s%s", bytes, units[unit], rate ? "/s" : "");
 }
 
+// Compact rates use the B/s unit beside the title; K/M/G are decimal prefixes.
+inline void compact_rate(double bytes, char *out, size_t size) {
+  if (!std::isfinite(bytes) || bytes < 0) { snprintf(out, size, "--"); return; }
+  const char *units[] = {"", "K", "M", "G", "T", "P", "E"};
+  int unit = 0;
+  while (bytes >= 999.5 && unit < 6) { bytes /= 1000; ++unit; }
+  snprintf(out, size, unit && bytes < 99.95 ? "%.1f%s" : "%.0f%s", bytes, units[unit]);
+}
+
+inline void direction_arrow(lgfx::LGFX_Sprite &g, int x, int y, bool up, uint16_t color) {
+  g.drawFastVLine(x+4, y, 12, color);
+  int tip = up ? y : y+11;
+  int wing = up ? y+4 : y+7;
+  g.drawLine(x, wing, x+4, tip, color);
+  g.drawLine(x+4, tip, x+8, wing, color);
+}
+
 inline void network_card(lgfx::LGFX_Sprite &g, const SysState &s, int x, int y) {
   if (y >= g.height() || y + NETWORK_H <= 0) return;
   g.fillRoundRect(x, y, CONTENT_W, NETWORK_H, 13, WHITE);
-  text(g, "Network", x+20, y+17, &fonts::DejaVu18, INK);
-  text(g, "Today's transfer", x+20, y+65, &fonts::DejaVu9, MUTE);
+  text(g, "Network", x+20, y+8, &fonts::DejaVu12, MUTE);
+  text(g, "B/s", x+166, y+10, &fonts::DejaVu9, MUTE);
+  int left = x+20;
   for (int i=0; i<2; ++i) {
-    int left = x + 210 + i*186;
-    text(g, i ? "Upload" : "Download", left, y+12, &fonts::DejaVu12, MUTE);
+    direction_arrow(g, left, y+32, i, i ? MUTE : BLUE);
+    char value[24]; compact_rate(i ? s.net_up : s.net_down, value, sizeof value);
+    text(g, value, left+14, y+27, &fonts::FreeSans12pt7b, INK);
+    left += 14 + g.textWidth(value);
+    if (!i) { text(g, "/", left+5, y+27, &fonts::FreeSans12pt7b, MUTE); left += 20; }
+  }
+  float scale = 1000;
+  constexpr int chart_w = CONTENT_W-236;
+  for (int i = s.count > chart_w ? s.count-chart_w : 0; i < s.count; ++i) {
+    if (std::isfinite(s.hist_net_down[i])) scale = fmaxf(scale, s.hist_net_down[i]);
+    if (std::isfinite(s.hist_net_up[i])) scale = fmaxf(scale, s.hist_net_up[i]);
+  }
+  sparkline(g, x+212, y+17, chart_w, 28, s.hist_net_up, s.count, scale, false, MUTE);
+  sparkline(g, x+212, y+17, chart_w, 28, s.hist_net_down, s.count, scale, false, BLUE);
+  left = x+20;
+  for (int i=0; i<2; ++i) {
+    direction_arrow(g, left, y+68, i, i ? MUTE : BLUE);
     char value[32];
-    traffic(i ? s.net_up : s.net_down, true, value, sizeof value);
-    text(g, value, left, y+34, &fonts::FreeSans12pt7b, BLUE);
     traffic(s.net_totals ? double(i ? s.net_tx : s.net_rx) : NAN, false, value, sizeof value);
-    text(g, value, left, y+67, &fonts::DejaVu12, MUTE);
+    text(g, value, left+14, y+67, &fonts::DejaVu12, MUTE);
+    left += 14 + g.textWidth(value);
+    if (!i) { text(g, "/", left+8, y+67, &fonts::DejaVu12, MUTE); left += 28; }
   }
 }
 

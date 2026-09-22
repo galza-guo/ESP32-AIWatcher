@@ -1,9 +1,12 @@
 # Network card
 
-System shows one Network card with separate Download and Upload columns.
-Each column shows bytes per second, then today's transferred bytes. Units are
-decimal B/KB/MB/GB (1000 bytes per KB), not bits per second. The four original
-metrics remain visible above it, with a more compact version of the same design.
+System shows one Network card matching the other metric labels and values.
+Drawn down/up arrows identify download/upload, separated by a slash. Compact
+live values use decimal K/M/G prefixes with B/s beside the title. Two matching
+blue/gray sparklines on the right show only rate history, sharing a scale over
+the visible window; missing samples leave gaps. Daily received/sent totals sit
+underneath with arrows and a slash, without a redundant caption. Totals never
+feed the graphs. Units are bytes, not bits, with 1000 bytes per KB.
 
 The Linux host reads receive/transmit counters from `/proc/net/dev`, summing
 interfaces with a hardware `device` link in `/sys/class/net`. This includes

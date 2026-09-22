@@ -33,6 +33,8 @@ int main() {
     sys.hist_cpu[i] = 22 + 9 * sinf(i * .06f) + 4 * sinf(i * .19f);
     sys.hist_mem[i] = 44 + 3 * sinf(i * .012f);
     sys.hist_temp[i] = 50 + 5 * sinf(i * .014f);
+    sys.hist_net_down[i] = 4e6 + 3e6 * sinf(i * .09f);
+    sys.hist_net_up[i] = 6e5 + 5e5 * sinf(i * .12f);
     sys.hist_fan[i] = 2700 + 250 * sinf(i * .019f);
   }
   Provider providers[3];
@@ -73,6 +75,10 @@ int main() {
     sys.net_up = frame ? frame * 11 : NAN;
     sys.net_rx += 1234567890ULL;
     for (int i = 0; i < HISTORY; ++i) sys.hist_cpu[i] = 30 + 20 * sinf(i * .06f + frame);
+    for (int i=0; i<HISTORY; ++i) {
+      sys.hist_net_down[i] = i % 17 ? 5e6 * (1+sinf(i*.09f+frame)) : NAN;
+      sys.hist_net_up[i] = i % 23 ? 2e6 * (1+sinf(i*.12f+frame)) : NAN;
+    }
     for (int card = 0; card < 4; ++card) {
       tile.fillScreen(PAPER);
       system_card(tile, sys, card, 0, 0);
@@ -139,6 +145,14 @@ int main() {
   tile.setBuffer(storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
   assert(tile.width() == CONTENT_W && tile.height() == SYSTEM_CARD_H);
   char formatted[32];
+  compact_rate(999999, formatted, sizeof formatted); assert(!strcmp(formatted,"1.0M"));
+  compact_rate(NAN, formatted, sizeof formatted); assert(!strcmp(formatted,"--"));
+  // Even the widest compact pair must remain left of the history chart.
+  canvas.setFont(&fonts::FreeSans12pt7b);
+  for (double value : {0., 99.9, 999., 99900., 999000., 99900000., 999000000.}) {
+    compact_rate(value, formatted, sizeof formatted);
+    assert(2 * (14 + canvas.textWidth(formatted)) + 20 <= 192);
+  }
   traffic(NAN, true, formatted, sizeof formatted); assert(!strcmp(formatted,"--"));
   traffic(0, true, formatted, sizeof formatted); assert(!strcmp(formatted,"0 B/s"));
   traffic(999999, true, formatted, sizeof formatted); assert(!strcmp(formatted,"1.0 MB/s"));

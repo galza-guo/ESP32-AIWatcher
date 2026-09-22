@@ -15,8 +15,11 @@ constexpr int TAB_W = 148;
 constexpr int CONTENT_X = 176;
 constexpr int CONTENT_Y = 108;
 constexpr int CONTENT_W = 596;
-constexpr int SYSTEM_CARD_H = 76;
-constexpr int SYSTEM_CARD_STEP = 86;
+constexpr int SYSTEM_CARD_H = 58;
+constexpr int SYSTEM_CARD_STEP = 66;
+constexpr int NETWORK_Y = 374;
+constexpr int NETWORK_H = 94;
+constexpr int RENDER_TILE_H = NETWORK_H;
 
 constexpr uint16_t rgb(unsigned r, unsigned g, unsigned b) {
   return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
@@ -48,6 +51,9 @@ struct SysState {
   float hist_cpu[HISTORY] = {}, hist_mem[HISTORY] = {};
   float hist_temp[HISTORY] = {}, hist_fan[HISTORY] = {};
   int count = 0;
+  double net_down = NAN, net_up = NAN;
+  uint64_t net_rx = 0, net_tx = 0;
+  bool net_totals = false;
 };
 
 struct Provider {
@@ -213,19 +219,46 @@ inline void system_card(lgfx::LGFX_Sprite &g, const SysState &s, int i, int x, i
   const float *history[] = {s.hist_cpu, s.hist_mem, s.hist_temp, s.hist_fan};
   const float scales[] = {100, 100, 100, 5000};
     g.fillRoundRect(x, y, CONTENT_W, SYSTEM_CARD_H, 13, WHITE);
-    text(g, names[i], x + 20, y + 11, &fonts::DejaVu12, MUTE);
+    text(g, names[i], x + 20, y + 8, &fonts::DejaVu12, MUTE);
     char value[24];
     if (std::isfinite(values[i])) snprintf(value, sizeof value, "%.0f%s", values[i], units[i]);
     else snprintf(value, sizeof value, "--");
-    text(g, value, x + 20, y + 34, &fonts::FreeSans18pt7b, INK);
-    sparkline(g, x + 212, y + 23, CONTENT_W - 236, 34,
+    text(g, value, x + 20, y + 27, &fonts::FreeSans12pt7b, INK);
+    sparkline(g, x + 212, y + 17, CONTENT_W - 236, 28,
               history[i], s.count, scales[i]);
+}
+
+inline void traffic(double bytes, bool rate, char *out, size_t size) {
+  if (!std::isfinite(bytes) || bytes < 0) { snprintf(out, size, "--"); return; }
+  const char *units[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB"};
+  int unit = 0;
+  while (bytes >= 1000 && unit < 6) { bytes /= 1000; ++unit; }
+  // Avoid a rounded 1000 KB label when the next unit is clearer.
+  if (bytes >= 999.95 && unit < 6) { bytes /= 1000; ++unit; }
+  snprintf(out, size, unit ? "%.1f %s%s" : "%.0f %s%s", bytes, units[unit], rate ? "/s" : "");
+}
+
+inline void network_card(lgfx::LGFX_Sprite &g, const SysState &s, int x, int y) {
+  if (y >= g.height() || y + NETWORK_H <= 0) return;
+  g.fillRoundRect(x, y, CONTENT_W, NETWORK_H, 13, WHITE);
+  text(g, "Network", x+20, y+17, &fonts::DejaVu18, INK);
+  text(g, "Today's transfer", x+20, y+65, &fonts::DejaVu9, MUTE);
+  for (int i=0; i<2; ++i) {
+    int left = x + 210 + i*186;
+    text(g, i ? "Upload" : "Download", left, y+12, &fonts::DejaVu12, MUTE);
+    char value[32];
+    traffic(i ? s.net_up : s.net_down, true, value, sizeof value);
+    text(g, value, left, y+34, &fonts::FreeSans12pt7b, BLUE);
+    traffic(s.net_totals ? double(i ? s.net_tx : s.net_rx) : NAN, false, value, sizeof value);
+    text(g, value, left, y+67, &fonts::DejaVu12, MUTE);
+  }
 }
 
 inline void system_cards(lgfx::LGFX_Sprite &g, const SysState &s, int dy = 0) {
   for (int i = 0; i < 4; ++i) {
     system_card(g, s, i, CONTENT_X, CONTENT_Y + i * SYSTEM_CARD_STEP + dy);
   }
+  network_card(g, s, CONTENT_X, NETWORK_Y + dy);
 }
 
 inline void usage_cards(lgfx::LGFX_Sprite &g, const Provider *providers, int count, int dy = 0) {

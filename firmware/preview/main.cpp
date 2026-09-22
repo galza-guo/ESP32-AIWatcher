@@ -26,6 +26,8 @@ int main() {
   assert(canvas.createSprite(WIDTH, HEIGHT));
   SysState sys;
   sys.cpu = 23; sys.mem = 46; sys.temp = 52; sys.fan = 2780;
+  sys.net_down = 8340000; sys.net_up = 726000;
+  sys.net_rx = 2345000000ULL; sys.net_tx = 425600000ULL; sys.net_totals = true;
   sys.count = 800;
   for (int i = 0; i < sys.count; ++i) {
     sys.hist_cpu[i] = 22 + 9 * sinf(i * .06f) + 4 * sinf(i * .19f);
@@ -60,12 +62,16 @@ int main() {
   // render, including shorter values, missing readings and graph movement.
   lgfx::LGFX_Sprite tile, expected;
   tile.setColorDepth(16); expected.setColorDepth(16);
-  assert(tile.createSprite(CONTENT_W, SYSTEM_CARD_H));
+  std::vector<uint16_t> card_storage(CONTENT_W * RENDER_TILE_H);
+  tile.setBuffer(card_storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
   assert(expected.createSprite(WIDTH, HEIGHT));
   render(canvas, PAGE_SYS, sys, providers, 3);
   for (int frame = 0; frame < 6; ++frame) {
     sys.cpu = frame ? frame * 9 : NAN;
     sys.fan = frame ? 999 / frame : NAN;
+    sys.net_down = frame ? 9e8 / frame : NAN;
+    sys.net_up = frame ? frame * 11 : NAN;
+    sys.net_rx += 1234567890ULL;
     for (int i = 0; i < HISTORY; ++i) sys.hist_cpu[i] = 30 + 20 * sinf(i * .06f + frame);
     for (int card = 0; card < 4; ++card) {
       tile.fillScreen(PAPER);
@@ -79,6 +85,17 @@ int main() {
           memcpy(before + begin, after + begin, (end - begin) * 2);
       }
     }
+    tile.setBuffer(card_storage.data(), CONTENT_W, NETWORK_H, 16);
+    tile.fillScreen(PAPER);
+    network_card(tile, sys, 0, 0);
+    for (int row=0; row<NETWORK_H; ++row) {
+      auto before = static_cast<uint16_t *>(canvas.getBuffer()) + (NETWORK_Y+row)*WIDTH + CONTENT_X;
+      auto after = static_cast<uint16_t *>(tile.getBuffer()) + row*CONTENT_W;
+      int begin, end;
+      if (changed_span(before, after, CONTENT_W, begin, end))
+        memcpy(before+begin, after+begin, (end-begin)*2);
+    }
+    tile.setBuffer(card_storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
     render(expected, PAGE_SYS, sys, providers, 3);
     assert(!memcmp(canvas.getBuffer(), expected.getBuffer(), WIDTH * HEIGHT * 2));
   }
@@ -88,7 +105,7 @@ int main() {
   assert(changed_span(row, different, 3, begin, end) && begin == 1 && end == 2);
   // Exercise clipped strip rendering and actual sprite blits across both
   // page transitions, missing data, and changing provider counts.
-  std::vector<uint16_t> storage(CONTENT_W * SYSTEM_CARD_H);
+  std::vector<uint16_t> storage(CONTENT_W * RENDER_TILE_H);
   tile.setBuffer(storage.data(), WIDTH, 48, 16);
   std::vector<uint16_t> front(WIDTH * HEIGHT);
   memcpy(front.data(), canvas.getBuffer(), WIDTH * HEIGHT * 2);
@@ -121,6 +138,11 @@ int main() {
   }
   tile.setBuffer(storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
   assert(tile.width() == CONTENT_W && tile.height() == SYSTEM_CARD_H);
+  char formatted[32];
+  traffic(NAN, true, formatted, sizeof formatted); assert(!strcmp(formatted,"--"));
+  traffic(0, true, formatted, sizeof formatted); assert(!strcmp(formatted,"0 B/s"));
+  traffic(999999, true, formatted, sizeof formatted); assert(!strcmp(formatted,"1.0 MB/s"));
+  traffic(5e9, false, formatted, sizeof formatted); assert(!strcmp(formatted,"5.0 GB"));
   assert(tab_at(35, 440, &page) && page == PAGE_SETTINGS);
   assert(!tab_at(35, 404, &page));
   Settings prefs;

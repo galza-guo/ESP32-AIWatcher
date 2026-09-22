@@ -42,8 +42,8 @@ BOOT (GPIO 0) also switches pages.
 The UI uses a 768 KB RGB565 canvas in PSRAM as its previous-image cache.
 Page switches and Usage updates render 800×48 strips in internal SRAM, compare
 each strip with that cache, then submit only changed row spans. The same buffer
-is reused for System's live updates, which render one
-596×76 card in a 90,592-byte **internal SRAM** tile, compare it against the
+is reused for System's live updates, which render compact 596×58 metric cards
+and one 596×94 Network card in a 112,048-byte **internal SRAM** tile, compare them against the
 last canvas, and copy only changed spans of each row. Unchanged card backgrounds,
 labels, navigation and headers never get copied during those updates. This
 reduces contention with the display's PSRAM scanout. Early board samples took

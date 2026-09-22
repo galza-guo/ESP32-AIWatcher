@@ -19,7 +19,7 @@ static lgfx::LGFX_Sprite system_tile;
 static bool tile_ready = false;
 static bool canvas_valid = false;
 static constexpr int PAGE_STRIP_H = 48;
-static_assert(WIDTH * PAGE_STRIP_H <= CONTENT_W * SYSTEM_CARD_H,
+static_assert(WIDTH * PAGE_STRIP_H <= CONTENT_W * RENDER_TILE_H,
               "Page strip must fit the internal card tile");
 static constexpr int BTN_PIN = 0;
 
@@ -95,6 +95,11 @@ static void handle_sys(JsonDocument &doc) {
   sys.mem = doc["mem"].isNull() ? NAN : doc["mem"].as<float>();
   sys.temp = doc["temp"].isNull() ? NAN : doc["temp"].as<float>();
   sys.fan = doc["fan"].isNull() ? NAN : doc["fan"].as<float>();
+  sys.net_down = doc["nd"].isNull() ? NAN : doc["nd"].as<double>();
+  sys.net_up = doc["nu"].isNull() ? NAN : doc["nu"].as<double>();
+  sys.net_totals = !doc["nr"].isNull() && !doc["nt"].isNull();
+  sys.net_rx = doc["nr"].as<uint64_t>();
+  sys.net_tx = doc["nt"].as<uint64_t>();
   push(sys.hist_cpu, sys.cpu);
   push(sys.hist_mem, sys.mem);
   push(sys.hist_temp, sys.temp);
@@ -206,6 +211,8 @@ static void update_system() {
   }
   uint32_t started = micros();
   uint32_t copied = 0;
+  auto pixels = system_tile.getBuffer();
+  system_tile.setBuffer(pixels, CONTENT_W, SYSTEM_CARD_H, 16);
   for (int card = 0; card < 4; ++card) {
     const int y = CONTENT_Y + card * SYSTEM_CARD_STEP;
     // Render in internal SRAM, away from the PSRAM used by RGB scanout.
@@ -213,6 +220,11 @@ static void update_system() {
     system_card(system_tile, sys, card, 0, 0);
     copied += submit_tile(CONTENT_X, y);
   }
+  system_tile.setBuffer(pixels, CONTENT_W, NETWORK_H, 16);
+  system_tile.fillScreen(PAPER);
+  network_card(system_tile, sys, 0, 0);
+  copied += submit_tile(CONTENT_X, NETWORK_Y);
+  system_tile.setBuffer(pixels, CONTENT_W, SYSTEM_CARD_H, 16);
   lcd.clearClipRect();
   finish_frame();
   // A bounded diagnostic sample verifies the actual traffic after startup.
@@ -353,14 +365,14 @@ void setup() {
     while (true) delay(1000);
   }
   Serial.printf("canvas_bytes=%u free_psram=%u\n", WIDTH * HEIGHT * 2, ESP.getFreePsram());
-  auto tile_pixels = heap_caps_malloc(CONTENT_W * SYSTEM_CARD_H * 2,
+  auto tile_pixels = heap_caps_malloc(CONTENT_W * RENDER_TILE_H * 2,
                                       MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (tile_pixels) {
     system_tile.setBuffer(tile_pixels, CONTENT_W, SYSTEM_CARD_H, 16);
     tile_ready = true;
   }
   Serial.printf("system_tile_internal=%u bytes=%u\n", tile_ready,
-                CONTENT_W * SYSTEM_CARD_H * 2);
+                CONTENT_W * RENDER_TILE_H * 2);
   show_page();
   lcd.setBrightness(brightness_duty(settings));
   idle_display.reset(millis());

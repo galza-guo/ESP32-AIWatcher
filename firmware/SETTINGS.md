@@ -31,5 +31,6 @@ touch startup logs; native previews of both themes; full/strip pixel equivalence
 for all pages and connection states; slider hit/drag capture; preference
 roundtrips and invalid values; idle deadlines including millis wraparound;
 wake gesture suppression and button wake. Four Python host tests pass.
-Physical control operation, persistence across a restart, and timed sleep/wake
-still require hardware confirmation.
+The user confirmed the controls look good; device logs show successful setting
+writes and restoration of 22% brightness after an app update and collector
+restart. Timed sleep/wake still requires a separate physical confirmation.

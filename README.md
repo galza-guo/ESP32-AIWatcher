@@ -1,5 +1,9 @@
 # ESP32-AIWatcher
 
+The `feat/display-settings` development branch adds a one-page settings panel
+with read-only connection details, brightness, Light/Dark appearance and idle
+sleep. See [settings behavior and validation](firmware/SETTINGS.md).
+
 A small, USB-connected desk display for Linux system performance and AI usage.
 An ESP32-S3 renders a minimal touch interface; a Python collector supplies the
 readings from your computer over serial.

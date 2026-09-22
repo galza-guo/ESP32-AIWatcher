@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include "settings.hpp"
 
 namespace desk_ui {
 
@@ -20,16 +21,27 @@ constexpr int SYSTEM_CARD_STEP = 86;
 constexpr uint16_t rgb(unsigned r, unsigned g, unsigned b) {
   return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 }
-constexpr auto PAPER = rgb(245, 245, 247);
-constexpr auto RAIL = rgb(237, 238, 241);
-constexpr auto WHITE = rgb(255, 255, 255);
-constexpr auto INK = rgb(29, 29, 31);
-constexpr auto MUTE = rgb(116, 119, 128);
-constexpr auto RULE = rgb(224, 226, 232);
-constexpr auto BLUE = rgb(0, 113, 227);
-constexpr auto TRACK = rgb(233, 239, 247);
+inline auto PAPER = rgb(245, 245, 247);
+inline auto RAIL = rgb(237, 238, 241);
+inline auto WHITE = rgb(255, 255, 255); // Card surface in either theme.
+inline auto INK = rgb(29, 29, 31);
+inline auto MUTE = rgb(116, 119, 128);
+inline auto RULE = rgb(224, 226, 232);
+inline auto BLUE = rgb(0, 113, 227);
+inline auto TRACK = rgb(233, 239, 247);
 
-enum Page { PAGE_SYS, PAGE_AI };
+inline void apply_theme(bool dark) {
+  PAPER = dark ? rgb(18,18,20) : rgb(245,245,247);
+  RAIL = dark ? rgb(24,24,27) : rgb(237,238,241);
+  WHITE = dark ? rgb(32,32,35) : rgb(255,255,255);
+  INK = dark ? rgb(242,242,247) : rgb(29,29,31);
+  MUTE = dark ? rgb(161,161,170) : rgb(116,119,128);
+  RULE = dark ? rgb(51,51,57) : rgb(224,226,232);
+  BLUE = dark ? rgb(80,163,255) : rgb(0,113,227);
+  TRACK = dark ? rgb(43,49,60) : rgb(233,239,247);
+}
+
+enum Page { PAGE_SYS, PAGE_AI, PAGE_SETTINGS };
 
 struct SysState {
   float cpu = NAN, mem = NAN, temp = NAN, fan = NAN;
@@ -50,6 +62,7 @@ inline bool tab_at(int x, int y, Page *out) {
   if (x < 12 || x >= TAB_W - 12) return false;
   if (y >= 108 && y < 158) { *out = PAGE_SYS; return true; }
   if (y >= 172 && y < 222) { *out = PAGE_AI; return true; }
+  if (SETTINGS_BUTTON.contains(x,y)) { *out = PAGE_SETTINGS; return true; }
   return false;
 }
 
@@ -100,10 +113,68 @@ inline void chrome(lgfx::LGFX_Sprite &g, Page page, int dy = 0) {
     icon(g, 24, y + 15, item, color);
     text(g, i ? "Usage" : "System", 55, y + 17, &fonts::DejaVu12, color);
   }
-  text(g, page == PAGE_SYS ? "System" : "Usage", CONTENT_X, 28 + dy,
+  if (page == PAGE_SETTINGS) g.fillRoundRect(12, 414+dy, 124, 50, 11, WHITE);
+  uint16_t gear = page == PAGE_SETTINGS ? BLUE : MUTE;
+  const int gx = 34, gy = 439+dy;
+  for (int i=0; i<8; ++i) {
+    float a = i * 3.14159265f / 4;
+    g.drawLine(gx + int(9*cosf(a)), gy + int(9*sinf(a)),
+               gx + int(13*cosf(a)), gy + int(13*sinf(a)), gear);
+  }
+  g.drawCircle(gx, gy, 9, gear);
+  g.drawCircle(gx, gy, 4, gear);
+  text(g, "Settings", 55, 431+dy, &fonts::DejaVu12, gear);
+  text(g, page == PAGE_SYS ? "System" : page == PAGE_AI ? "Usage" : "Settings", CONTENT_X, 28 + dy,
        &fonts::FreeSans18pt7b, INK);
-  text(g, page == PAGE_SYS ? "Live performance" : "Daily totals & recent activity",
+  text(g, page == PAGE_SYS ? "Live performance" : page == PAGE_AI ? "Daily totals & recent activity" : "A little more personal",
        CONTENT_X + 1, 73 + dy, &fonts::DejaVu12, MUTE);
+}
+
+inline void choice(lgfx::LGFX_Sprite &g, Rect r, int dy, const char *label, bool selected) {
+  g.fillRoundRect(r.x+2, r.y+2+dy, r.w-4, r.h-4, 9, selected ? WHITE : RAIL);
+  text(g, label, r.x+r.w/2, r.y+r.h/2+dy, &fonts::DejaVu12,
+       selected ? BLUE : MUTE, lgfx::textdatum_t::middle_center);
+}
+
+inline void settings_cards(lgfx::LGFX_Sprite &g, const Settings &s,
+                           ConnectionStatus status, int dy = 0) {
+  g.fillRoundRect(CONTENT_X, 108+dy, CONTENT_W, 78, 13, WHITE);
+  text(g, "ESP32-AIWatcher", 196, 124+dy, &fonts::FreeSans12pt7b, INK);
+  char version[32]; snprintf(version, sizeof version, "Firmware %s", FIRMWARE_VERSION);
+  text(g, version, 196, 158+dy, &fonts::DejaVu9, MUTE);
+  g.fillCircle(580, 136+dy, 4, status.connected() ? BLUE : MUTE);
+  text(g, status.connected() ? "Connected" : status.seen ? "Disconnected" : "Waiting for host",
+       594, 126+dy, &fonts::DejaVu12, INK);
+  char age[40];
+  if (!status.seen) snprintf(age, sizeof age, "No data received");
+  else if (status.age_seconds < 3) snprintf(age, sizeof age, "Data updated just now");
+  else if (status.age_seconds < 60) snprintf(age, sizeof age, "Updated %lus ago", (unsigned long)status.age_seconds);
+  else if (status.age_seconds < 3600) snprintf(age, sizeof age, "Updated %lum ago", (unsigned long)status.age_seconds/60);
+  else snprintf(age, sizeof age, "Updated %luh ago", (unsigned long)status.age_seconds/3600);
+  text(g, age, 752, 158+dy, &fonts::DejaVu9, MUTE, lgfx::textdatum_t::top_right);
+
+  g.fillRoundRect(CONTENT_X, 202+dy, CONTENT_W, 82, 13, WHITE);
+  text(g, "Brightness", 196, 220+dy, &fonts::DejaVu18, INK);
+  text(g, "Comfort for your space", 196, 254+dy, &fonts::DejaVu9, MUTE);
+  char value[12]; snprintf(value, sizeof value, "%u%%", s.brightness);
+  text(g, value, 744, 218+dy, &fonts::DejaVu12, MUTE, lgfx::textdatum_t::top_right);
+  int knob = SLIDER_LEFT + (s.brightness-10) * (SLIDER_RIGHT-SLIDER_LEFT)/90;
+  g.fillRoundRect(SLIDER_LEFT, SLIDER_Y-2+dy, SLIDER_RIGHT-SLIDER_LEFT, 4, 2, TRACK);
+  if (knob > SLIDER_LEFT) g.fillRoundRect(SLIDER_LEFT, SLIDER_Y-2+dy, knob-SLIDER_LEFT, 4, 2, BLUE);
+  g.fillCircle(knob, SLIDER_Y+dy, 8, BLUE);
+
+  g.fillRoundRect(CONTENT_X, 296+dy, CONTENT_W, 68, 13, WHITE);
+  text(g, "Appearance", 196, 319+dy, &fonts::DejaVu18, INK);
+  g.fillRoundRect(508, 308+dy, 244, 44, 11, RAIL);
+  choice(g, LIGHT_BUTTON, dy, "Light", !s.dark);
+  choice(g, DARK_BUTTON, dy, "Dark", s.dark);
+
+  g.fillRoundRect(CONTENT_X, 377+dy, CONTENT_W, 68, 13, WHITE);
+  text(g, "Sleep after", 196, 391+dy, &fonts::DejaVu18, INK);
+  text(g, "Touch to wake", 196, 422+dy, &fonts::DejaVu9, MUTE);
+  g.fillRoundRect(454, 389+dy, 298, 44, 11, RAIL);
+  const char *labels[] = {"Never", "5 min", "15 min"};
+  for (int i=0; i<3; ++i) choice(g, SLEEP_BUTTONS[i], dy, labels[i], s.sleep==i);
 }
 
 inline void sparkline(lgfx::LGFX_Sprite &g, int x, int y, int w, int h,
@@ -188,10 +259,13 @@ inline void usage_cards(lgfx::LGFX_Sprite &g, const Provider *providers, int cou
 }
 
 inline void render(lgfx::LGFX_Sprite &g, Page page, const SysState &sys,
-                   const Provider *providers, int count, int dy = 0) {
+                   const Provider *providers, int count, int dy = 0,
+                   const Settings &settings = Settings{}, ConnectionStatus status = {}) {
+  apply_theme(settings.dark);
   chrome(g, page, dy);
   if (page == PAGE_SYS) system_cards(g, sys, dy);
-  else usage_cards(g, providers, count, dy);
+  else if (page == PAGE_AI) usage_cards(g, providers, count, dy);
+  else settings_cards(g, settings, status, dy);
 }
 
 } // namespace desk_ui

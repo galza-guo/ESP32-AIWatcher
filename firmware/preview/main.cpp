@@ -121,5 +121,55 @@ int main() {
   }
   tile.setBuffer(storage.data(), CONTENT_W, SYSTEM_CARD_H, 16);
   assert(tile.width() == CONTENT_W && tile.height() == SYSTEM_CARD_H);
+  assert(tab_at(35, 440, &page) && page == PAGE_SETTINGS);
+  assert(!tab_at(35, 404, &page));
+  Settings prefs;
+  SettingsGesture gesture;
+  assert(!gesture.update(prefs, 230, 140, true)); // Read-only status card.
+  assert(gesture.update(prefs, SLIDER_LEFT, SLIDER_Y, true));
+  assert(prefs.brightness == 10 && brightness_duty(prefs) > 0);
+  assert(gesture.update(prefs, 799, SLIDER_Y, false) && prefs.brightness == 100);
+  gesture.release();
+  assert(!gesture.update(prefs, 680, 320, false)); // No captured drag.
+  assert(!prefs.dark);
+  assert(gesture.update(prefs, 680, 320, true) && prefs.dark);
+  assert(gesture.update(prefs, 600, 410, true) && prefs.sleep == 1);
+  assert(encode_settings(decode_settings(encode_settings(prefs))) == encode_settings(prefs));
+  for (uint32_t invalid : {0u, 0xffffffffu, 0xA1010000u, 0xA1010065u, 0xA1010664u})
+    assert(encode_settings(decode_settings(invalid)) == encode_settings(Settings{}));
+  IdleDisplay idle;
+  idle.reset(0xfffffff0u);
+  assert(!idle.tick(0xfffffff0u + 299999u, prefs));
+  assert(idle.tick(0xfffffff0u + 300000u, prefs));
+  assert(idle.contact(300010) && !idle.asleep());
+  assert(idle.contact(300050)); // Entire wake gesture is consumed.
+  idle.release();
+  assert(!idle.contact(300100));
+  assert(idle.tick(600100, prefs));
+  assert(idle.button(600200));
+  assert(!idle.button(600300));
+  prefs.sleep = 0;
+  assert(!idle.tick(3600000, prefs));
+
+  // Settings, dark-theme transitions and status updates must also be identical
+  // whether drawn at once or in clipped strips.
+  tile.setBuffer(storage.data(), WIDTH, 48, 16);
+  for (bool dark : {false, true}) {
+    prefs.dark = dark;
+    for (Page next : {PAGE_SYS, PAGE_AI, PAGE_SETTINGS}) {
+      for (ConnectionStatus status : {ConnectionStatus{}, ConnectionStatus{true, 0}, ConnectionStatus{true, 86400}}) {
+        render(expected, next, sys, providers, 3, 0, prefs, status);
+        for (int y=0; y<HEIGHT; y+=48) {
+          render(tile, next, sys, providers, 3, -y, prefs, status);
+          tile.pushSprite(&canvas, 0, y);
+        }
+        assert(!memcmp(canvas.getBuffer(), expected.getBuffer(), WIDTH*HEIGHT*2));
+      }
+      if (next == PAGE_SETTINGS) {
+        render(canvas, next, sys, providers, 3, 0, prefs, {true,0});
+        save(canvas, dark ? "settings-dark.ppm" : "settings-light.ppm");
+      } else if (dark) save(canvas, next == PAGE_SYS ? "system-dark.ppm" : "usage-dark.ppm");
+    }
+  }
   puts("Rendered previews; navigation and incremental pixel-equivalence checks passed.");
 }

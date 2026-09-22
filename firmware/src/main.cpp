@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <esp_heap_caps.h>
+#include <Preferences.h>
 
 #include "panel.hpp"
 #include "ui.hpp"
@@ -34,6 +35,46 @@ static bool touch_down = false;
 static bool chrome_dirty = true;
 static bool sys_dirty = false;
 static bool ai_dirty = false;
+static Settings settings;
+static SettingsGesture settings_gesture;
+static IdleDisplay idle_display;
+static Preferences preferences;
+static bool preferences_ready = false;
+static bool settings_pending = false;
+static uint32_t settings_changed_at = 0;
+static uint32_t settings_save_delay = 1200;
+static uint32_t saved_settings = 0;
+static bool seen_data = false;
+static uint32_t last_data_at = 0;
+static uint32_t last_status_refresh = 0;
+
+static ConnectionStatus connection_status() {
+  return {seen_data, uint32_t(millis() - last_data_at) / 1000};
+}
+
+static void settings_changed() {
+  settings_pending = true;
+  settings_changed_at = millis();
+  settings_save_delay = 1200;
+  lcd.setBrightness(brightness_duty(settings));
+  chrome_dirty = true;
+}
+
+static void save_settings() {
+  if (!settings_pending || touch_down || millis()-settings_changed_at < settings_save_delay) return;
+  uint32_t encoded = encode_settings(settings);
+  if (encoded == saved_settings) { settings_pending = false; return; }
+  if (preferences_ready && preferences.putUInt("display", encoded) == sizeof(uint32_t)) {
+    saved_settings = encoded;
+    settings_pending = false;
+    Serial.printf("settings saved brightness=%u dark=%u sleep=%u\n",
+                  settings.brightness, settings.dark, settings.sleep);
+  } else {
+    Serial.println("error: settings save failed");
+    settings_changed_at = millis();
+    settings_save_delay = 10000;
+  }
+}
 
 static int touch_sda = 42;
 static int touch_scl = 41;
@@ -91,8 +132,11 @@ static void take_line(char *raw) {
   DeserializationError err = deserializeJson(doc, raw);
   if (err) return;
   const char *kind = doc["t"] | "";
-  if (kind[0] == 's') handle_sys(doc);
-  else if (kind[0] == 'a') handle_ai(doc);
+  if (!strcmp(kind, "s")) {
+    handle_sys(doc);
+    seen_data = true;
+    last_data_at = millis();
+  } else if (!strcmp(kind, "a")) handle_ai(doc);
 }
 
 // Compose off-screen, then copy only complete content to the scanout buffer.
@@ -143,8 +187,9 @@ static uint32_t render_page_tiles() {
   void *pixels = system_tile.getBuffer();
   system_tile.setBuffer(pixels, WIDTH, PAGE_STRIP_H, 16);
   uint32_t copied = 0;
+  const ConnectionStatus status = connection_status();
   for (int y = 0; y < HEIGHT; y += PAGE_STRIP_H) {
-    desk_ui::render(system_tile, page, sys, providers, provider_n, -y);
+    desk_ui::render(system_tile, page, sys, providers, provider_n, -y, settings, status);
     copied += submit_tile(0, y);
   }
   system_tile.setBuffer(pixels, CONTENT_W, SYSTEM_CARD_H, 16);
@@ -184,17 +229,18 @@ static void show_page() {
   uint32_t copied = 0;
   if (tile_ready) copied = render_page_tiles();
   else {
-    desk_ui::render(canvas, page, sys, providers, provider_n);
+    desk_ui::render(canvas, page, sys, providers, provider_n, 0, settings, connection_status());
     present(true);
     copied = WIDTH * HEIGHT * 2;
   }
   finish_frame();
   Serial.printf("page=%s update_us=%lu copied_bytes=%lu\n",
-                page == PAGE_SYS ? "System" : "Usage",
+                page == PAGE_SYS ? "System" : page == PAGE_AI ? "Usage" : "Settings",
                 (unsigned long)(micros() - started), (unsigned long)copied);
   chrome_dirty = false;
   sys_dirty = false;
   ai_dirty = false;
+  last_status_refresh = millis();
 }
 
 static bool gt_write(uint16_t reg, uint8_t val) {
@@ -265,16 +311,20 @@ static bool gt_start() {
 
 void setup() {
   Serial.begin(115200);
+  preferences_ready = preferences.begin("aiwatcher", false);
+  settings = decode_settings(preferences_ready ? preferences.getUInt("display", encode_settings(Settings{})) : 0);
+  saved_settings = encode_settings(settings);
+  Serial.printf("settings loaded brightness=%u dark=%u sleep=%u storage=%u\n",
+                settings.brightness, settings.dark, settings.sleep, preferences_ready);
   pinMode(BTN_PIN, INPUT_PULLUP);
   pinMode(1, OUTPUT);
-  digitalWrite(1, HIGH);
+  digitalWrite(1, LOW);
   if (!lcd.init()) {
     Serial.println("error: display initialization failed");
     while (true) delay(1000);
   }
   lcd.setRotation(0);
-  lcd.setBrightness(255);
-  digitalWrite(1, HIGH);
+  lcd.setBrightness(0);
   bool ok = gt_start();
   // The touch controller stays powered across ESP32 resets. Restore normal
   // coordinate reporting if a previous firmware left it in raw-data mode.
@@ -312,6 +362,8 @@ void setup() {
   Serial.printf("system_tile_internal=%u bytes=%u\n", tile_ready,
                 CONTENT_W * SYSTEM_CARD_H * 2);
   show_page();
+  lcd.setBrightness(brightness_duty(settings));
+  idle_display.reset(millis());
 }
 
 void loop() {
@@ -330,7 +382,8 @@ void loop() {
 
   bool btn = digitalRead(BTN_PIN);
   if (btn_last && !btn) {
-    page = (page == PAGE_SYS) ? PAGE_AI : PAGE_SYS;
+    if (idle_display.button(millis())) lcd.setBrightness(brightness_duty(settings));
+    else page = (page == PAGE_SYS) ? PAGE_AI : PAGE_SYS;
     chrome_dirty = true;
   }
   btn_last = btn;
@@ -341,20 +394,42 @@ void loop() {
     last_touch = millis();
     if (sample > 0) {
       int px = raw_x, py = raw_y;
-      if (!touch_down) {
+      bool was_asleep = idle_display.asleep();
+      bool wake_gesture = idle_display.contact(millis());
+      if (was_asleep) {
+        lcd.setBrightness(brightness_duty(settings));
+        chrome_dirty = true;
+        Serial.println("display awake");
+      }
+      if (!wake_gesture && !touch_down) {
         Page next = page;
         Serial.printf("touch x=%d y=%d\n", px, py);
         if (tab_at(px, py, &next) && next != page) {
           page = next;
           chrome_dirty = true;
+          settings_gesture.release();
+        } else if (page == PAGE_SETTINGS && settings_gesture.update(settings, px, py, true)) {
+          settings_changed();
         }
+      } else if (!wake_gesture && page == PAGE_SETTINGS && touch_down &&
+                 settings_gesture.update(settings, px, py, false)) {
+        settings_changed();
       }
       touch_down = true;
     } else if (sample == 0) {
       touch_down = false;
+      settings_gesture.release();
+      idle_display.release();
     }
   }
 
+  save_settings();
+  if (!touch_down && idle_display.tick(millis(), settings)) {
+    lcd.setBrightness(0);
+    Serial.println("display asleep");
+  }
+  if (idle_display.asleep()) { delay(1); return; }
+  if (page == PAGE_SETTINGS && millis()-last_status_refresh >= 1000) chrome_dirty = true;
   if (chrome_dirty) {
     show_page();
     return;

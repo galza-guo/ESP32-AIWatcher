@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "host" / "desk_monitor.py"
+sys.path.insert(0, str(ROOT / "host"))
 
 
 def load_mod():
@@ -51,6 +53,15 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(ids, ["codex", "grok", "minimax"])
         grok = next(row for row in payload["providers"] if row["id"] == "grok")
         self.assertEqual(grok["label"], "Grok")
+
+    def test_network_serial_payload(self):
+        collector = load_mod().Collector()
+        collector.network = {"down": 1234.7, "up": None, "rx": 2**40, "tx": 2**39}
+        message = json.loads(collector.serial_sys_line())
+        self.assertEqual(message["nd"], 1235)
+        self.assertIsNone(message["nu"])
+        self.assertEqual(message["nr"], 2**40)
+        self.assertEqual(message["nt"], 2**39)
 
 
 if __name__ == "__main__":

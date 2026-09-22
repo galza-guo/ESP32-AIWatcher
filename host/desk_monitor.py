@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from network import NetworkMeter, read_counters
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = ROOT / "ui"
@@ -211,7 +212,7 @@ def load_ai() -> dict[str, Any]:
 
 
 class Collector:
-    def __init__(self) -> None:
+    def __init__(self, network_state: Path | None = None) -> None:
         self.lock = threading.Lock()
         self.history = {
             "cpu": deque(maxlen=HISTORY),
@@ -227,6 +228,9 @@ class Collector:
         }
         self.ai = load_ai()
         self.prev_cpu: tuple[int, int] | None = None
+        boot_id = (_read_text(Path("/proc/sys/kernel/random/boot_id")) or "unknown").strip()
+        self.network_meter = NetworkMeter(network_state, boot_id)
+        self.network = {"down": None, "up": None, "rx": 0, "tx": 0}
         self.serial_path: str | None = None
         self._stop = threading.Event()
 
@@ -241,6 +245,7 @@ class Collector:
         if times:
             self.prev_cpu = times
         hwmons = hwmon_map()
+        network = self.network_meter.sample(read_counters())
         point = {
             "cpu": cpu,
             "mem": mem_percent(),
@@ -249,6 +254,7 @@ class Collector:
         }
         with self.lock:
             self.latest = point
+            self.network = network
             for key, value in point.items():
                 if value is None:
                     continue
@@ -269,6 +275,7 @@ class Collector:
             return {
                 "t": int(time.time() * 1000),
                 "sys": dict(self.latest),
+                "network": dict(self.network),
                 "history": hist,
                 "ai": dict(self.ai),
             }
@@ -276,6 +283,7 @@ class Collector:
     def serial_sys_line(self) -> bytes:
         with self.lock:
             latest = dict(self.latest)
+            network = dict(self.network)
 
         def num(key: str) -> float | None:
             value = latest.get(key)
@@ -289,6 +297,10 @@ class Collector:
             "mem": num("mem"),
             "temp": num("temp"),
             "fan": num("fan"),
+            "nd": None if network["down"] is None else round(network["down"]),
+            "nu": None if network["up"] is None else round(network["up"]),
+            "nr": network["rx"],
+            "nt": network["tx"],
         }
         return (json.dumps(payload, separators=(",", ":")) + "\n").encode()
 
@@ -315,7 +327,8 @@ class Collector:
         return (json.dumps({"t": "a", "p": providers}, separators=(",", ":")) + "\n").encode()
 
 
-COLLECTOR = Collector()
+COLLECTOR = Collector(Path(os.environ.get("XDG_STATE_HOME", str(Path.home()/".local/state")))
+                      / "esp32-aiwatcher/network.json")
 
 
 def configure_serial(fd: int) -> None:
@@ -399,6 +412,7 @@ def collector_loop() -> None:
         COLLECTOR._stop.wait(1.0 / SYS_HZ)
     if serial_fd is not None:
         os.close(serial_fd)
+    COLLECTOR.network_meter.save()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -479,6 +493,7 @@ def main() -> int:
         pass
     finally:
         COLLECTOR._stop.set()
+        worker.join(timeout=3)
         server.server_close()
     return 0
 

@@ -11,6 +11,7 @@ class DeskPanel : public lgfx::LGFX_Sprite {
   esp_lcd_panel_handle_t handle_ = nullptr;
   void *frames_[2] = {};
   int back_ = 1;
+  bool pwm_ready_ = false;
   volatile uint32_t completed_ = 0;
   FrameDamage<800, 480> damage_;
   static bool IRAM_ATTR frame_complete(esp_lcd_panel_handle_t,
@@ -104,7 +105,14 @@ class DeskPanel : public lgfx::LGFX_Sprite {
   }
 
   void setBrightness(uint8_t brightness) {
-    pinMode(1, OUTPUT);
-    digitalWrite(1, brightness ? HIGH : LOW);
+    if (!pwm_ready_) {
+      pwm_ready_ = ledcAttach(1, 12000, 8);
+      Serial.printf("backlight_pwm=%u\n", pwm_ready_);
+    }
+    if (pwm_ready_) ledcWrite(1, brightness);
+    else {
+      pinMode(1, OUTPUT);
+      digitalWrite(1, brightness ? HIGH : LOW);
+    }
   }
 };

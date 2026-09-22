@@ -6,16 +6,21 @@ readings from your computer over serial.
 
 ## What it shows
 
-- **System:** CPU and memory utilization, temperature, fan speed, and live traces.
+- **System:** CPU, memory, temperature, fan speed, and upload/download speeds
+  with live traces and persistent daily network totals.
 - **Usage:** GPT/Codex, Grok, and MiniMax totals, available cost estimates,
   recent activity, and usage limits from local usage files.
-- A light, restrained interface with two touch tabs and a physical BOOT-button
+- **Settings:** brightness, Light/Dark appearance, idle sleep and read-only
+  connection details. Preferences persist on the device.
+- A minimal interface with touch tabs and a physical BOOT-button
   shortcut. A companion browser dashboard runs at `http://127.0.0.1:7824/`.
 
-**Stable release: v1.0.0.** Display, touch, live System updates and tab switching
-are verified on the hardware below. Double framebuffers and internal RGB DMA
-buffers resolve the previously observed tearing. See [hardware validation](firmware/STATUS.md)
-and [download the release](https://github.com/galza-guo/ESP32-AIWatcher/releases/tag/v1.0.0).
+**Latest release: v1.1.0.** Adds [display settings](firmware/SETTINGS.md),
+[network monitoring](firmware/NETWORK.md), and stronger dark-mode typography.
+The double-framebuffer display driver retains the v1.0.0 tearing fix.
+See [hardware validation](firmware/STATUS.md) and
+[download the release](https://github.com/galza-guo/ESP32-AIWatcher/releases/tag/v1.1.0).
+Upgrade both firmware and the host collector to receive Network data.
 
 ## Hardware
 
